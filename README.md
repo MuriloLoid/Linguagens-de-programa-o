@@ -7,6 +7,7 @@ O site também contará o tempo de processamento do código em milissegundos (ms
 ## Como Usar
 
 Para testar os códigos, você pode copiar e colar os exemplos abaixo nos editores de código correspondentes disponíveis em seu site no GitHub Pages.
+[Linguagens de Programação](https://muriloloid.github.io/Linguagens-de-programa-o/)
 
 ### JavaScript
 
