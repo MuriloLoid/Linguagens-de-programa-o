@@ -1,0 +1,257 @@
+<html><head><base href="." /><script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.3/ace.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/wabt@1.0.32/index.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: white;
+            margin: 20px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .code-section {
+            background-color: #2d2d2d;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .editor {
+            height: 300px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .output {
+            background-color: #1a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            min-height: 100px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+
+        .execution-time {
+            color: #888;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="code-section">
+            <h2>Python</h2>
+            <div id="pythonEditor" class="editor"></div>
+            <div class="controls">
+                <button onclick="runPython()">Executar Python</button>
+                <div class="execution-time" id="pythonTime">Tempo: 0ms</div>
+            </div>
+            <div class="output" id="pythonOutput"></div>
+        </div>
+
+        <div class="code-section">
+            <h2>JavaScript</h2>
+            <div id="javascriptEditor" class="editor"></div>
+            <div class="controls">
+                <button onclick="runJavaScript()">Executar JavaScript</button>
+                <div class="execution-time" id="javascriptTime">Tempo: 0ms</div>
+            </div>
+            <div class="output" id="javascriptOutput"></div>
+        </div>
+
+        <div class="code-section">
+            <h2>WebAssembly Text (WAT)</h2>
+            <div id="watEditor" class="editor"></div>
+            <div class="controls">
+                <button onclick="runWat()">Executar WebAssembly</button>
+                <div class="execution-time" id="watTime">Tempo: 0ms</div>
+            </div>
+            <div class="output" id="watOutput"></div>
+        </div>
+    </div>
+
+    <script>
+        let pythonEditor, javascriptEditor, watEditor;
+        let pyodide;
+        let pyodideReadyPromise;
+
+        async function initPyodide() {
+            try {
+                if (!pyodide) {
+                    pyodideReadyPromise = loadPyodide({
+                        indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/"
+                    });
+                    pyodide = await pyodideReadyPromise;
+                }
+                return pyodide;
+            } catch (error) {
+                console.error("Erro ao inicializar Pyodide:", error);
+                document.getElementById('pythonOutput').innerHTML = 
+                    `Erro ao carregar Pyodide. Por favor, recarregue a página. Detalhes: ${error.message}`;
+            }
+        }
+
+        window.addEventListener('load', () => {
+            initPyodide().catch(console.error);
+        });
+
+        window.onload = function() {
+            pythonEditor = ace.edit("pythonEditor");
+            pythonEditor.setTheme("ace/theme/monokai");
+            pythonEditor.session.setMode("ace/mode/python");
+            pythonEditor.setValue(`# Exemplo Python
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+print(fibonacci(10))
+`);
+
+            javascriptEditor = ace.edit("javascriptEditor");
+            javascriptEditor.setTheme("ace/theme/monokai");
+            javascriptEditor.session.setMode("ace/mode/javascript");
+            javascriptEditor.setValue(`// Exemplo JavaScript
+function fibonacci(n) {
+    if (n <= 1) return n;
+    return fibonacci(n-1) + fibonacci(n-2);
+}
+
+console.log(fibonacci(10));
+`);
+
+            watEditor = ace.edit("watEditor");
+            watEditor.setTheme("ace/theme/monokai");
+            watEditor.session.setMode("ace/mode/text");
+            watEditor.setValue(`(module
+    (func $fibonacci (param $n i32) (result i32)
+        (if (result i32)
+            (i32.le_s (local.get $n) (i32.const 1))
+            (then (local.get $n))
+            (else
+                (i32.add
+                    (call $fibonacci (i32.sub (local.get $n) (i32.const 1)))
+                    (call $fibonacci (i32.sub (local.get $n) (i32.const 2)))
+                )
+            )
+        )
+    )
+    (export "fibonacci" (func $fibonacci))
+)`);
+        }
+
+        async function runPython() {
+            const pythonOutput = document.getElementById('pythonOutput');
+            const pythonTime = document.getElementById('pythonTime');
+            const code = pythonEditor.getValue();
+            
+            pythonOutput.innerHTML = 'Inicializando Pyodide...';
+            
+            try {
+                if (!pyodide) {
+                    await initPyodide();
+                }
+                
+                const startTime = performance.now();
+                
+                pyodide.runPython(`
+                    import sys
+                    import io
+                    sys.stdout = io.StringIO()
+                `);
+                
+                await pyodide.runPythonAsync(code);
+                const output = pyodide.runPython("sys.stdout.getvalue()");
+                
+                const endTime = performance.now();
+                pythonOutput.innerHTML = output || 'Execução completa sem saída';
+                pythonTime.innerHTML = `Tempo: ${(endTime - startTime).toFixed(2)}ms`;
+            } catch (error) {
+                pythonOutput.innerHTML = `Erro: ${error}`;
+                console.error("Erro na execução do Python:", error);
+            }
+        }
+
+        function runJavaScript() {
+            const javascriptOutput = document.getElementById('javascriptOutput');
+            const javascriptTime = document.getElementById('javascriptTime');
+            const code = javascriptEditor.getValue();
+            
+            javascriptOutput.innerHTML = 'Executando...';
+            const startTime = performance.now();
+            
+            try {
+                const originalLog = console.log;
+                let output = '';
+                console.log = (...args) => {
+                    output += args.join(' ') + '\n';
+                };
+                
+                eval(code);
+                
+                console.log = originalLog;
+                const endTime = performance.now();
+                
+                javascriptOutput.innerHTML = output || 'Execução completa sem saída';
+                javascriptTime.innerHTML = `Tempo: ${(endTime - startTime).toFixed(2)}ms`;
+            } catch (error) {
+                javascriptOutput.innerHTML = `Erro: ${error}`;
+            }
+        }
+
+        async function runWat() {
+            const watOutput = document.getElementById('watOutput');
+            const watTime = document.getElementById('watTime');
+            const code = watEditor.getValue();
+            
+            watOutput.innerHTML = 'Compilando e executando...';
+            const startTime = performance.now();
+            
+            try {
+                const wabt = await WabtModule();
+                const module = wabt.parseWat('', code);
+                const binary = module.toBinary({});
+                const wasm = await WebAssembly.instantiate(binary.buffer);
+                
+                const result = wasm.instance.exports.fibonacci(10);
+                
+                const endTime = performance.now();
+                watOutput.innerHTML = `Resultado: ${result}`;
+                watTime.innerHTML = `Tempo: ${(endTime - startTime).toFixed(2)}ms`;
+                
+                module.destroy();
+            } catch (error) {
+                watOutput.innerHTML = `Erro: ${error}`;
+                console.error("Erro na execução do WebAssembly:", error);
+            }
+        }
+    </script>
+</body></html>
